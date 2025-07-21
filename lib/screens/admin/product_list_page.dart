@@ -35,7 +35,7 @@ class _ProductListPageState extends State<ProductListPage> {
   }
 
   void _deleteProduct(Product p) async {
-    final confirm = await showDialog(
+    final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('Delete Product'),
@@ -47,17 +47,29 @@ class _ProductListPageState extends State<ProductListPage> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text('Delete'),
+            child: Text('Delete', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
     );
 
     if (confirm == true) {
-      await ProductService.deleteProduct(p.id);
-      setState(() {
-        products = ProductService.fetchProducts();
-      });
+      try {
+        await ProductService.deleteProduct(p.id);
+
+        setState(() {
+          // Instead of removeWhere, re-fetch the list:
+          products = ProductService.fetchProducts();
+        });
+
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('${p.name} deleted')));
+      } catch (e) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to delete product: $e')));
+      }
     }
   }
 

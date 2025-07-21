@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../models/product.dart';
 import '../../services/product_service.dart';
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
 
 class EditProductPage extends StatefulWidget {
   final Product product;
@@ -13,6 +15,9 @@ class EditProductPage extends StatefulWidget {
 
 class _EditProductPageState extends State<EditProductPage> {
   final _formKey = GlobalKey<FormState>();
+
+  File? _selectedImage;
+  final ImagePicker _picker = ImagePicker();
 
   late TextEditingController _nameController;
   late TextEditingController _categoryController;
@@ -52,28 +57,50 @@ class _EditProductPageState extends State<EditProductPage> {
     super.dispose();
   }
 
+  Future<void> _pickImage() async {
+    final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
+    if (pickedFile != null) {
+      setState(() {
+        _selectedImage = File(pickedFile.path);
+        _imageUrlController.text = pickedFile.path; // just to show something
+      });
+    }
+  }
+
   void _saveProduct() async {
-    if (_formKey.currentState!.validate()) {
-      final updatedProduct = Product(
-        id: widget.product.id,
-        name: _nameController.text.trim(),
-        category: _categoryController.text.trim(),
-        brand: _brandController.text.trim(),
-        description: _descriptionController.text.trim(),
-        price: double.tryParse(_priceController.text.trim()) ?? 0,
-        stock: int.tryParse(_stockController.text.trim()) ?? 0,
-        imageUrl: _imageUrlController.text.trim(),
+    final updatedProduct = Product(
+      id: widget.product.id,
+      name: _nameController.text,
+      category: _categoryController.text,
+      brand: _brandController.text,
+      price: double.tryParse(_priceController.text) ?? 0,
+      stock: int.tryParse(_stockController.text) ?? 0,
+      description: _descriptionController.text,
+      imageUrl: widget.product.imageUrl,
+    );
+
+    final updated = await ProductService.updateProductWithImage(
+      product: updatedProduct,
+      imageFile: _selectedImage,
+    );
+
+    if (updated != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Product updated successfully'),
+          backgroundColor: Colors.green,
+        ),
       );
+      print('✅ Edit successful, popping with result: true');
 
-      final updated = await ProductService.updateProduct(updatedProduct);
-
-      if (updated != null) {
-        Navigator.pop(context, true); // Return true to indicate refresh needed
-      } else {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to update product')));
-      }
+      Navigator.pop(context, true);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to update product'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
@@ -129,9 +156,26 @@ class _EditProductPageState extends State<EditProductPage> {
                   return parsed == null || parsed < 0 ? 'Invalid stock' : null;
                 },
               ),
-              TextFormField(
-                controller: _imageUrlController,
-                decoration: InputDecoration(labelText: 'Image URL'),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text("Image"),
+                  const SizedBox(height: 8),
+                  GestureDetector(
+                    onTap: _pickImage,
+                    child: _selectedImage != null
+                        ? Image.file(_selectedImage!, height: 150)
+                        : widget.product.imageUrl.isNotEmpty
+                        ? Image.network(widget.product.imageUrl, height: 150)
+                        : Container(
+                            height: 150,
+                            color: Colors.grey[200],
+                            child: const Center(
+                              child: Text("Tap to select image"),
+                            ),
+                          ),
+                  ),
+                ],
               ),
               const SizedBox(height: 20),
               ElevatedButton(onPressed: _saveProduct, child: Text('Save')),

@@ -1,4 +1,7 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:http/http.dart' as http;
 import '../../models/product.dart';
 import '../../services/product_service.dart';
 
@@ -19,7 +22,20 @@ class _AddProductPageState extends State<AddProductPage> {
   final _descriptionController = TextEditingController();
   final _imageUrlController = TextEditingController();
 
+  final ImagePicker _picker = ImagePicker();
+  File? _pickedImage;
+
   bool _isSubmitting = false;
+
+  Future<void> _pickImage() async {
+    final XFile? picked = await _picker.pickImage(source: ImageSource.gallery);
+    if (picked != null) {
+      setState(() {
+        _pickedImage = File(picked.path);
+        _imageUrlController.text = picked.path; // update text field
+      });
+    }
+  }
 
   Future<void> _submitForm() async {
     if (!_formKey.currentState!.validate()) return;
@@ -27,26 +43,41 @@ class _AddProductPageState extends State<AddProductPage> {
     setState(() => _isSubmitting = true);
 
     try {
-      final newProduct = Product(
-        id: 0, // ignored on create
-        name: _nameController.text,
-        category: _categoryController.text,
-        brand: _brandController.text,
-        price: double.parse(_priceController.text),
-        stock: int.parse(_stockController.text),
-        description: _descriptionController.text,
-        imageUrl: _imageUrlController.text,
-      );
+      var uri = Uri.parse('http://10.0.2.2:8000/api/products');
 
-      await ProductService.createProduct(newProduct);
+      var request = http.MultipartRequest('POST', uri);
+      request.fields['name'] = _nameController.text;
+      request.fields['category'] = _categoryController.text;
+      request.fields['brand'] = _brandController.text;
+      request.fields['price'] = _priceController.text;
+      request.fields['stock'] = _stockController.text;
+      request.fields['description'] = _descriptionController.text;
 
-      if (context.mounted) {
-        Navigator.pop(context, true); // return true to refresh
+      if (_pickedImage != null) {
+        request.files.add(
+          await http.MultipartFile.fromPath('image', _pickedImage!.path),
+        );
+      }
+
+      var response = await request.send();
+
+      if (response.statusCode == 201) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('Product added')));
+          Navigator.pop(context, true);
+        }
+      } else {
+        final respStr = await response.stream.bytesToString();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed: ${response.statusCode}\n$respStr')),
+        );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Failed to create product: $e'),
-      ));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to create product: $e')));
     } finally {
       setState(() => _isSubmitting = false);
     }
@@ -94,8 +125,8 @@ class _AddProductPageState extends State<AddProductPage> {
                 keyboardType: TextInputType.number,
                 validator: (value) =>
                     value!.isEmpty || double.tryParse(value) == null
-                        ? 'Enter valid price'
-                        : null,
+                    ? 'Enter valid price'
+                    : null,
               ),
               TextFormField(
                 controller: _stockController,
@@ -103,17 +134,36 @@ class _AddProductPageState extends State<AddProductPage> {
                 keyboardType: TextInputType.number,
                 validator: (value) =>
                     value!.isEmpty || int.tryParse(value) == null
-                        ? 'Enter valid stock'
-                        : null,
+                    ? 'Enter valid stock'
+                    : null,
               ),
               TextFormField(
                 controller: _descriptionController,
                 decoration: const InputDecoration(labelText: 'Description'),
               ),
-              TextFormField(
-                controller: _imageUrlController,
-                decoration: const InputDecoration(labelText: 'Image URL'),
+              Row(
+                children: [
+                  ElevatedButton(
+                    onPressed: _pickImage,
+                    child: const Text('Pick Image'),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _imageUrlController,
+                      readOnly: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Image Path',
+                      ),
+                    ),
+                  ),
+                ],
               ),
+              if (_pickedImage != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: Image.file(_pickedImage!, height: 150),
+                ),
               const SizedBox(height: 20),
               ElevatedButton(
                 onPressed: _isSubmitting ? null : _submitForm,

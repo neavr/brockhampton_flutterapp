@@ -20,22 +20,22 @@ class Product {
   });
 
   factory Product.fromJson(Map<String, dynamic> json) {
-    String rawImageUrl = json['image_url'];
-    String imageUrl = rawImageUrl.startsWith('http')
-        ? rawImageUrl
-        : 'http://10.0.2.2:8000/$rawImageUrl';
-
+    final data =
+        json['data'] ?? json; // fallback if you're passed inner or outer
     return Product(
-      id: json['id'],
-      name: json['name'],
-      category: json['category'],
-      brand: json['brand'],
-      description: json['description'],
-      price: (json['price'] is int)
-          ? (json['price'] as int).toDouble()
-          : double.parse(json['price'].toString()),
-      stock: json['stock'],
-      imageUrl: imageUrl,
+      id: data['id'] ?? 0, // or throw if id is required
+      name: data['name'] ?? '',
+      category: data['category'] ?? '',
+      brand: data['brand'] ?? '',
+      description: data['description'] ?? '',
+      price: (data['price'] is int)
+          ? (data['price'] as int).toDouble()
+          : double.tryParse(data['price'].toString()) ?? 0.0,
+      stock: data['stock'] ?? 0,
+      imageUrl: (() {
+        String raw = data['image_url'] ?? '';
+        return raw.startsWith('http') ? raw : 'http://10.0.2.2:8000/$raw';
+      })(),
     );
   }
 }
